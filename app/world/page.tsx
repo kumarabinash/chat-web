@@ -2,106 +2,30 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Socket, io } from 'socket.io-client';
-import { CHAT_EVENTS, USER_EVENTS } from '@/types/event.enum';
-
-const socket: Socket = io('http://localhost:3001');
-
-interface Message {
-    message: string;
-    sender: string;
-    timestamp: string;
-    type: string; // chat or system
-}
-
-interface MessagePayload {
-    message: Message;
-    userName: string;
-}
+import { useChat } from '@/hooks/use-chat.hook';
 
 export default function WorldChat() {
     const router = useRouter();
     const userName = sessionStorage.getItem('username');
-    const [isConnected, setIsConnected] = useState(false);
-
-    const [messages, setMessages] = useState<Message[]>([]);
-
-    useEffect(() => {
-        socket.on('connect', () => {
-            console.log('Connected to server');
-            setIsConnected(true);
-        });
-
-        socket.on('connect_error', (error) => {
-            console.error('Connection error:', error);
-            setIsConnected(false);
-        });
-
-        socket.on('disconnect', () => {
-            console.log('Disconnected from server');
-            setIsConnected(false);
-        });
-
-        return () => {
-            socket.off('connect');
-            socket.off('connect_error');
-            socket.off('disconnect');
-        };
-    }, []);
+    const [message, setMessage] = useState('');
+    const { isConnected,messages, sendMessage, disconnect } = useChat(userName);
 
     useEffect(() => {
         if (!userName) {
             router.replace('/');
-            return;
         }
-
-        if (isConnected) {
-            socket.emit(USER_EVENTS.USER_JOIN_REQUEST, userName);
-        }
-    }, [router, userName, isConnected]);
+    }, [router, userName]);
 
     const handleLogout = () => {
         sessionStorage.clear();
-        socket.emit(USER_EVENTS.USER_DISCONNECT, userName);
+        disconnect();
         router.replace('/');
     };
 
-    useEffect(() => {
-        socket.on(USER_EVENTS.USER_JOIN_REQUEST, (message: string) => {
-            console.log(message);
-        });
-
-        socket.on(CHAT_EVENTS.CHAT_MESSAGE_RECEIVED, (message: MessagePayload) => {
-            console.log(message);
-            setMessages((prevMessages) => [...prevMessages, message.message]);
-        });
-
-        socket.on(USER_EVENTS.USER_JOINED, (message: string) => {
-            console.log(message);
-        });
-
-        return () => {
-            socket.off(USER_EVENTS.USER_JOIN_REQUEST);
-            socket.off(CHAT_EVENTS.CHAT_MESSAGE_RECEIVED);
-            socket.off(USER_EVENTS.USER_JOINED);
-        };
-    }, [socket]);
-
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-
-        const form = e.target as HTMLFormElement;
-        const message = form.message.value;
-
-        socket.emit(CHAT_EVENTS.CHAT_MESSAGE, {
-            message,
-            sender: userName,
-            timestamp: new Date().toISOString(),
-            type: 'chat',
-        });
-
-        form.reset();
-        console.log(message);
+        sendMessage(message);
+        setMessage('');
     };
 
     const formatDate = (date: string) => {
@@ -148,8 +72,8 @@ export default function WorldChat() {
                         <div className="flex items-center gap-2">
                             <img src={getAvatar(userName)} alt="avatar" className="w-10 h-10 rounded-full" />
                         </div>
-                        <input type="text" name="message" placeholder="Message" className="w-full p-2 border-2 border-gray-300 rounded-md" />
-                        <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">Send</button>
+                        <input value={message} onChange={(e) => setMessage(e.target.value)} type="text" name="message" placeholder="Message" className="w-full p-2 border-2 border-gray-300 rounded-md" />
+                        <button disabled={!isConnected || !message} type="submit" className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed">Send</button>
                     </form>
                 </div>
             </div>
